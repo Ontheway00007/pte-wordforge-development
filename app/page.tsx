@@ -20,7 +20,7 @@ const ARTICLES: ArticleQuestion[] = [
   { sentence:'Technology has ___ important role in education.', answer:'an', rule:'Important begins with a vowel sound.' },
 ]
 
-const initialState = { mastery: {} as Record<string, number>, attempts: 0, correct: 0, streak: 0, practised: {} as Record<string, boolean> }
+const initialState = { mastery: {} as Record<string, number>, attempts: 0, correct: 0, streak: 0, practised: {} as Record<string, boolean>, spellingReviews: {} as Record<string, { dueAt: number; correctStreak: number }> }
 
 type Tab = 'home' | 'spell' | 'learn' | 'quiz' | 'article' | 'weak' | 'library'
 
@@ -44,13 +44,27 @@ export default function Page() {
 
   function mastery(word: string) { return state.mastery[word] || 0 }
   function updateWord(word: string, amount: number) { setState(s => ({ ...s, mastery: { ...s.mastery, [word]: Math.max(0, Math.min(100, (s.mastery[word] || 0) + amount)) }, practised: { ...s.practised, [word]: true } })) }
+  function scheduleSpellingReview(word: string, correct: boolean) {
+    setState(s => {
+      const previous = s.spellingReviews[word] || { dueAt: 0, correctStreak: 0 }
+      const correctStreak = correct ? previous.correctStreak + 1 : 0
+      const delay = correct
+        ? [60_000, 3 * 60_000, 10 * 60_000, 24 * 60 * 60_000][Math.min(correctStreak - 1, 3)]
+        : 30_000
+      return { ...s, spellingReviews: { ...s.spellingReviews, [word]: { dueAt: Date.now() + delay, correctStreak } } }
+    })
+  }
   function speak(word: string) { if ('speechSynthesis' in window) { speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(word); utterance.lang = 'en-AU'; utterance.rate = .78; speechSynthesis.speak(utterance) } }
   function chooseTab(next: Tab) { setTab(next); if (next === 'spell') nextSpell(); if (next === 'quiz') newQuiz() }
   function nextSpell() {
     if (spellIndex < spellHistory.length - 1) {
       setSpellIndex(i => i + 1)
     } else {
-      setSpellHistory(history => [...history, WORDS[Math.floor(Math.random() * WORDS.length)]])
+      const now = Date.now()
+      const due = WORDS.filter(w => w.word !== spellWord.word && (state.spellingReviews[w.word]?.dueAt || 0) <= now)
+      const pool = due.length ? due : WORDS.filter(w => w.word !== spellWord.word)
+      const next = pool.sort((a, b) => mastery(a.word) - mastery(b.word))[Math.floor(Math.random() * Math.min(pool.length, 5))]
+      setSpellHistory(history => [...history, next])
       setSpellIndex(i => i + 1)
     }
     setSpellAnswer('')
@@ -62,7 +76,7 @@ export default function Page() {
     setSpellAnswer('')
     setSpellFeedback(null)
   }
-  function checkSpelling() { if (!spellAnswer.trim()) return; const ok = spellAnswer.trim().toLowerCase() === spellWord.word; setState(s => ({ ...s, attempts: s.attempts + 1, correct: s.correct + (ok ? 1 : 0), streak: ok ? s.streak + 1 : 0, practised: { ...s.practised, [spellWord.word]: true } })); updateWord(spellWord.word, ok ? 12 : -4); setSpellFeedback({ ok, text: ok ? `Correct! ${spellWord.word}` : `Correct spelling: ${spellWord.word}` }); if (ok) setTimeout(nextSpell, 850) }
+  function checkSpelling() { if (!spellAnswer.trim()) return; const ok = spellAnswer.trim().toLowerCase() === spellWord.word; setState(s => ({ ...s, attempts: s.attempts + 1, correct: s.correct + (ok ? 1 : 0), streak: ok ? s.streak + 1 : 0, practised: { ...s.practised, [spellWord.word]: true } })); updateWord(spellWord.word, ok ? 12 : -4); scheduleSpellingReview(spellWord.word, ok); setSpellFeedback({ ok, text: ok ? `Correct! ${spellWord.word}` : `Correct spelling: ${spellWord.word}` }); if (ok) setTimeout(nextSpell, 850) }
   function newQuiz() { const correct = WORDS[Math.floor(Math.random() * WORDS.length)]; setQuiz({ correct, options: [...WORDS.filter(w => w.word !== correct.word).sort(() => Math.random() - .5).slice(0, 3), correct].sort(() => Math.random() - .5) }); setQuizFeedback(null) }
   function answerQuiz(word: Word) { const ok = word.word === quiz.correct.word; setState(s => ({ ...s, attempts: s.attempts + 1, correct: s.correct + (ok ? 1 : 0), streak: ok ? s.streak + 1 : 0, practised: { ...s.practised, [quiz.correct.word]: true } })); updateWord(quiz.correct.word, ok ? 8 : -2); setQuizFeedback({ ok, text: ok ? 'Correct' : 'Try again' }); if (ok) setTimeout(newQuiz, 700) }
   function reset() { if (confirm('Delete all WordForge progress?')) { localStorage.removeItem('pteWordForge'); location.reload() } }
