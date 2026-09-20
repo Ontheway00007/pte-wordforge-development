@@ -61,9 +61,15 @@ export default function Page() {
       setSpellIndex(i => i + 1)
     } else {
       const now = Date.now()
-      const due = WORDS.filter(w => w.word !== spellWord.word && (state.spellingReviews[w.word]?.dueAt || 0) <= now)
-      const pool = due.length ? due : WORDS.filter(w => w.word !== spellWord.word)
-      const next = pool.sort((a, b) => mastery(a.word) - mastery(b.word))[Math.floor(Math.random() * Math.min(pool.length, 5))]
+      const available = WORDS.filter(w => w.word !== spellWord.word)
+      const unseen = available.filter(w => !state.practised[w.word])
+      const due = available.filter(w => {
+        const review = state.spellingReviews[w.word]
+        return review && review.dueAt <= now
+      })
+      const pool = unseen.length ? unseen : due.length ? due : available
+      const ranked = [...pool].sort((a, b) => mastery(a.word) - mastery(b.word))
+      const next = ranked[Math.floor(Math.random() * Math.min(ranked.length, unseen.length ? 8 : 5))]
       setSpellHistory(history => [...history, next])
       setSpellIndex(i => i + 1)
     }
