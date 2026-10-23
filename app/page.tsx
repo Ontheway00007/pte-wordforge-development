@@ -127,6 +127,9 @@ export default function Page() {
   function chooseTab(next: Tab) { setTab(next); if (next === 'spell') nextSpell(); if (next === 'quiz') newQuiz() }
   function nextSpell() {
     if (spellIndex < spellHistory.length - 1) {
+      setStudyNotice('')
+      setHintUsed(false)
+      speak(spellHistory[spellIndex + 1].word)
       setSpellIndex(i => i + 1)
     } else {
       const now = Date.now()
@@ -134,15 +137,15 @@ export default function Page() {
       const due = available.filter(w => state.spellingReviews[w.word]?.dueAt <= now)
         .sort((a, b) => state.spellingReviews[a.word].dueAt - state.spellingReviews[b.word].dueAt)
       const unseen = available.filter(w => !state.spellingReviews[w.word] && !spellHistory.some(h => h.word === w.word))
-      const skipped = available.filter(w => !state.spellingReviews[w.word])
-      const allowNew = (state.daily[todayKey()]?.newWords.length || 0) < 20
-      const next = due[0] || (allowNew ? unseen[0] || skipped[0] : undefined)
+      const skipped = available.filter(w => w.word !== spellWord.word && !state.spellingReviews[w.word])
+      const next = due.find(w => w.word !== spellWord.word) || unseen[0] || skipped[0] || due[0]
       if (!next) {
-        setStudyNotice('You are caught up. Missed words return after 30 seconds; correct words return after 1, 3 and 7 days. Come back tomorrow for up to 20 new words, or press Next later to check for due reviews.')
+        setStudyNotice('No new words or due reviews are available right now. Missed words become eligible after 30 seconds; correct words return after 1, 3 and 7 days. Press Next later to check for due reviews.')
         return
       }
       setStudyNotice('')
       setHintUsed(false)
+      speak(next.word)
       setSpellHistory(history => [...history, next])
       setSpellIndex(i => i + 1)
     }
@@ -151,6 +154,9 @@ export default function Page() {
   }
   function previousSpell() {
     if (spellIndex === 0) return
+    setStudyNotice('')
+    setHintUsed(false)
+    speak(spellHistory[spellIndex - 1].word)
     setSpellIndex(i => i - 1)
     setSpellAnswer('')
     setSpellFeedback(null)
@@ -182,7 +188,7 @@ export default function Page() {
   return <main className="app-shell">
     <header className="topbar"><div className="brand"><div className="logo">P</div><div><h1>PTE WordForge</h1><p>Academic vocabulary + spelling practice that adapts to your weak words</p></div></div><button className="button danger" onClick={reset}><RotateCcw size={16}/> Reset progress</button></header>
     <section className="stats">{[['Mastered', mastered],['Spelling accuracy', `${accuracy}%`],['Current streak', state.streak],['Words practised', Object.keys(state.practised).length]].map(([label,value]) => <div className="stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</section>
-    <aside className="rule"><strong>Daily spelling plan · {WORDS.length} unique words and phrases</strong><p>Review due words first, then practise up to 20 new words. Existing vocabulary comes before the imported PDF list. Misses return after 30 seconds; unassisted correct answers are reviewed after 1, 3 and 7 days. Four successful reviews retire a word.</p><p>Today: {state.daily[todayKey()]?.newWords.length || 0}/20 new words · {state.daily[todayKey()]?.answers || 0} answers. Listen → type without hints → check → inspect mistakes → Next.</p><small>The PDF contains 1,122 numbered entries, not 1,223 unique words. Duplicates are merged. Imported spelling-only entries are excluded from meaning quizzes.</small></aside>
+    <aside className="rule"><strong>Daily spelling plan · {WORDS.length} unique words and phrases</strong><p>Review due words first, then aim for 20 new words. You can continue beyond this daily goal. Existing vocabulary comes before the imported PDF list. Misses return after 30 seconds; unassisted correct answers are reviewed after 1, 3 and 7 days. Four successful reviews retire a word.</p><p>Today: {state.daily[todayKey()]?.newWords.length || 0}/20 new words · {state.daily[todayKey()]?.answers || 0} answers. Listen → type without hints → check → inspect mistakes → Next.</p><small>The PDF contains 1,122 numbered entries, not 1,223 unique words. Duplicates are merged. Imported spelling-only entries are excluded from meaning quizzes.</small></aside>
     {studyNotice && <p role="status" className="rule">{studyNotice}</p>}
     <nav className="nav-tabs">{nav.map(({id,label,icon:Icon}) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => chooseTab(id)}><Icon size={16}/>{label}</button>)}</nav>
     <section className="panel">{tab === 'home' && <Home go={chooseTab}/>} {tab === 'spell' && <Spell submitted={!!answered[spellIndex]} word={spellWord} answer={spellAnswer} setAnswer={setSpellAnswer} feedback={spellFeedback} check={checkSpelling} hint={() => { setHintUsed(true); setSpellFeedback({ok:true,text:`${spellWord.meaning || 'PDF spelling practice'} • ${spellWord.word.length} characters including spaces • starts with ${spellWord.word[0].toUpperCase()}`}) }} previous={previousSpell} next={nextSpell} canGoBack={spellIndex > 0} speak={speak}/>} {tab === 'learn' && <Learn word={WORDS[learnIndex % WORDS.length]} mastery={mastery} speak={speak} next={() => setLearnIndex(i => i + 1)} know={() => { updateWord(WORDS[learnIndex % WORDS.length].word, 10); setLearnIndex(i => i + 1) }}/>} {tab === 'quiz' && <Quiz quiz={quiz} feedback={quizFeedback} speak={speak} answer={answerQuiz}/>} {tab === 'article' && <Article q={ARTICLES[articleIndex]} feedback={articleFeedback} answer={(answer) => setArticleFeedback({ok:answer===ARTICLES[articleIndex].answer,text:answer===ARTICLES[articleIndex].answer ? 'Correct' : `Correct answer: ${ARTICLES[articleIndex].answer === 'none' ? 'No article' : ARTICLES[articleIndex].answer}`})} next={() => { setArticleIndex(Math.floor(Math.random()*ARTICLES.length)); setArticleFeedback(null) }}/>} {tab === 'weak' && <WordList title="Weak Words" words={weak} empty="No weak words yet. Start the spelling trainer first." mastery={mastery} speak={speak}/>} {tab === 'library' && <><h2>Fast Track Word Library</h2><input className="search" aria-label="Search words" placeholder="Search word or meaning..." value={search} onChange={e => setSearch(e.target.value)}/><WordList words={filtered} mastery={mastery} speak={speak}/></>}</section>
