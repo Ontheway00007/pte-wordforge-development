@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Brain, Check, ChevronLeft, ChevronRight, Headphones, House, Lightbulb, List, RotateCcw, Target, Volume2, X } from 'lucide-react'
 
 import listeningWords from '@/data/listening-words.json'
+import { usePronunciation } from '@/components/use-pronunciation'
 import { WordLesson } from '@/components/word-lesson'
 
 type Word = { word: string; meaning: string }
@@ -123,7 +124,7 @@ export default function Page() {
         spellingReviews: { ...s.spellingReviews, [word]: { dueAt: Date.now() + delay, correctStreak } } }
     })
   }
-  function speak(word: string) { if ('speechSynthesis' in window) { speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(word); utterance.lang = 'en-AU'; utterance.rate = .78; speechSynthesis.speak(utterance) } }
+  const { speak, audioError, retrySound } = usePronunciation()
   function chooseTab(next: Tab) { setTab(next); if (next === 'spell') nextSpell(); if (next === 'quiz') newQuiz() }
   function nextSpell() {
     if (spellIndex < spellHistory.length - 1) {
@@ -190,6 +191,7 @@ export default function Page() {
     <section className="stats">{[['Mastered', mastered],['Spelling accuracy', `${accuracy}%`],['Current streak', state.streak],['Words practised', Object.keys(state.practised).length]].map(([label,value]) => <div className="stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</section>
     <aside className="rule"><strong>Daily spelling plan · {WORDS.length} unique words and phrases</strong><p>Review due words first, then aim for 20 new words. You can continue beyond this daily goal. Existing vocabulary comes before the imported PDF list. Misses return after 30 seconds; unassisted correct answers are reviewed after 1, 3 and 7 days. Four successful reviews retire a word.</p><p>Today: {state.daily[todayKey()]?.newWords.length || 0}/20 new words · {state.daily[todayKey()]?.answers || 0} answers. Listen → type without hints → check → inspect mistakes → Next.</p><small>The PDF contains 1,122 numbered entries, not 1,223 unique words. Duplicates are merged. Imported spelling-only entries are excluded from meaning quizzes.</small></aside>
     {studyNotice && <p role="status" className="rule">{studyNotice}</p>}
+    {audioError && <div role="alert" className="rule"><p>{audioError}</p><button className="button" onClick={retrySound}>Retry sound</button></div>}
     <nav className="nav-tabs">{nav.map(({id,label,icon:Icon}) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => chooseTab(id)}><Icon size={16}/>{label}</button>)}</nav>
     <section className="panel">{tab === 'home' && <Home go={chooseTab}/>} {tab === 'spell' && <Spell submitted={!!answered[spellIndex]} word={spellWord} answer={spellAnswer} setAnswer={setSpellAnswer} feedback={spellFeedback} check={checkSpelling} hint={() => { setHintUsed(true); setSpellFeedback({ok:true,text:`${spellWord.meaning || 'PDF spelling practice'} • ${spellWord.word.length} characters including spaces • starts with ${spellWord.word[0].toUpperCase()}`}) }} previous={previousSpell} next={nextSpell} canGoBack={spellIndex > 0} speak={speak}/>} {tab === 'learn' && <Learn word={WORDS[learnIndex % WORDS.length]} mastery={mastery} speak={speak} next={() => setLearnIndex(i => i + 1)} know={() => { updateWord(WORDS[learnIndex % WORDS.length].word, 10); setLearnIndex(i => i + 1) }}/>} {tab === 'quiz' && <Quiz quiz={quiz} feedback={quizFeedback} speak={speak} answer={answerQuiz}/>} {tab === 'article' && <Article q={ARTICLES[articleIndex]} feedback={articleFeedback} answer={(answer) => setArticleFeedback({ok:answer===ARTICLES[articleIndex].answer,text:answer===ARTICLES[articleIndex].answer ? 'Correct' : `Correct answer: ${ARTICLES[articleIndex].answer === 'none' ? 'No article' : ARTICLES[articleIndex].answer}`})} next={() => { setArticleIndex(Math.floor(Math.random()*ARTICLES.length)); setArticleFeedback(null) }}/>} {tab === 'weak' && <WordList title="Weak Words" words={weak} empty="No weak words yet. Start the spelling trainer first." mastery={mastery} speak={speak}/>} {tab === 'library' && <><h2>Fast Track Word Library</h2><input className="search" aria-label="Search words" placeholder="Search word or meaning..." value={search} onChange={e => setSearch(e.target.value)}/><WordList words={filtered} mastery={mastery} speak={speak}/></>}</section>
   </main>
